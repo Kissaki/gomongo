@@ -15,7 +15,7 @@ import (
 
 // Default Socket Port
 const _PORT = 27017
-
+const _NETWORK = "ipv4"
 
 type Connection struct {
 	Addr *net.TCPAddr
@@ -28,11 +28,10 @@ func Connect(host string) (*Connection, os.Error) {
 
 /* Creates a new connection to a single MongoDB instance at host:port. */
 func ConnectAt(host string, port int) (*Connection, os.Error) {
-	addr, err := net.ResolveTCPAddr(fmt.Sprintf("%s:%d", host, port))
+	addr, err := net.ResolveTCPAddr(_NETWORK, fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return nil, err
 	}
-
 	return ConnectByAddr(addr)
 }
 
