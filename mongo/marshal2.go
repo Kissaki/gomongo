@@ -64,21 +64,21 @@ func Marshal2(val interface{}) (encoded []byte, err os.Error) {
 	}
 
 	// Dereference pointer types
-	switch v := reflect.NewValue(val).(type) {
-	case *reflect.PtrValue:
+	switch v := reflect.ValueOf(val); v.Kind() {
+	case reflect.Ptr:
 		val = v.Elem().Interface()
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, 32))
-	switch fv := reflect.NewValue(val).(type) {
-	case *reflect.FloatValue, *reflect.StringValue, *reflect.BoolValue,
-		*reflect.IntValue, *reflect.UintValue, *reflect.SliceValue, *reflect.ArrayValue:
+	switch fv := reflect.ValueOf(val); fv.Kind() {
+	case reflect.Float32, reflect.Float64, reflect.String, reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr, reflect.Slice, reflect.Array:
 		// Wrap simple types in a container
 		val = SimpleContainer{fv.Interface()}
-		EncodeStruct(buf, reflect.NewValue(val).(*reflect.StructValue))
-	case *reflect.StructValue:
+		EncodeStruct(buf, reflect.ValueOf(val))
+	case reflect.Struct:
 		EncodeStruct(buf, fv)
-	case *reflect.MapValue:
+	case reflect.Map:
 		EncodeMap(buf, fv)
 	default:
 		panic(NewBsonError("Unexpected type %v\n", fv.Type()))
@@ -106,35 +106,35 @@ func EncodeField(buf *bytes.Buffer, key string, val interface{}) {
 	return
 
 CompositeType:
-	switch fv := reflect.NewValue(val).(type) {
-	case *reflect.FloatValue:
+	switch fv := reflect.ValueOf(val); fv.Kind() {
+	case reflect.Float32, reflect.Float64:
 		EncodePrefix(buf, '\x01', key)
-		EncodeFloat64(buf, fv.Get())
-	case *reflect.StringValue:
+		EncodeFloat64(buf, fv.Float())
+	case reflect.String:
 		EncodePrefix(buf, '\x02', key)
-		EncodeString(buf, fv.Get())
-	case *reflect.BoolValue:
+		EncodeString(buf, fv.String())
+	case reflect.Bool:
 		EncodePrefix(buf, '\x08', key)
-		EncodeBool(buf, fv.Get())
-	case *reflect.IntValue:
+		EncodeBool(buf, fv.Bool())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		EncodePrefix(buf, '\x12', key)
-		EncodeUint64(buf, uint64(fv.Get()))
-	case *reflect.UintValue:
+		EncodeUint64(buf, uint64(fv.Int()))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		EncodePrefix(buf, '\x12', key)
-		EncodeUint64(buf, fv.Get())
-	case *reflect.StructValue:
+		EncodeUint64(buf, fv.Uint())
+	case reflect.Struct:
 		EncodePrefix(buf, '\x03', key)
 		EncodeStruct(buf, fv)
-	case *reflect.MapValue:
+	case reflect.Map:
 		EncodePrefix(buf, '\x03', key)
 		EncodeMap(buf, fv)
-	case *reflect.SliceValue:
+	case reflect.Slice:
 		EncodePrefix(buf, '\x04', key)
 		EncodeSlice(buf, fv)
-	case *reflect.PtrValue:
+	case reflect.Ptr:
 		EncodeField(buf, key, fv.Elem().Interface())
 	default:
-		panic(NewBsonError("don't know how to marshal %v\n", reflect.NewValue(val).Type()))
+		panic(NewBsonError("don't know how to marshal %v\n", reflect.ValueOf(val).Type()))
 	}
 }
 
@@ -188,9 +188,9 @@ func EncodeBinary(buf *bytes.Buffer, val []byte) {
 	buf.Write(val)
 }
 
-func EncodeStruct(buf *bytes.Buffer, val *reflect.StructValue) {
+func EncodeStruct(buf *bytes.Buffer, val reflect.Value) {
 	lenWriter := NewLenWriter(buf)
-	t := val.Type().(*reflect.StructType)
+	t := val.Type()
 	for i := 0; i < t.NumField(); i++ {
 		key := strings.ToLower(t.Field(i).Name)
 		EncodeField(buf, key, val.Field(i).Interface())
@@ -199,25 +199,25 @@ func EncodeStruct(buf *bytes.Buffer, val *reflect.StructValue) {
 	lenWriter.RecordLen()
 }
 
-func EncodeMap(buf *bytes.Buffer, val *reflect.MapValue) {
+func EncodeMap(buf *bytes.Buffer, val reflect.Value) {
 	lenWriter := NewLenWriter(buf)
-	mt := val.Type().(*reflect.MapType)
-	if mt.Key() != reflect.Typeof("") {
+	mt := val.Type()
+	if mt.Key() != reflect.TypeOf("") {
 		panic(NewBsonError("can't marshall maps with non-string key types"))
 	}
-	keys := val.Keys()
+	keys := val.MapKeys()
 	for _, k := range keys {
-		key := k.(*reflect.StringValue).Get()
-		EncodeField(buf, key, val.Elem(k).Interface())
+		key := k.String()
+		EncodeField(buf, key, val.MapIndex(k).Interface())
 	}
 	buf.WriteByte(0)
 	lenWriter.RecordLen()
 }
 
-func EncodeSlice(buf *bytes.Buffer, val *reflect.SliceValue) {
+func EncodeSlice(buf *bytes.Buffer, val reflect.Value) {
 	lenWriter := NewLenWriter(buf)
 	for i := 0; i < val.Len(); i++ {
-		EncodeField(buf, strconv.Itoa(i), val.Elem(i).Interface())
+		EncodeField(buf, strconv.Itoa(i), val.Index(i).Interface())
 	}
 	buf.WriteByte(0)
 	lenWriter.RecordLen()
